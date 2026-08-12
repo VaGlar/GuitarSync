@@ -49,6 +49,12 @@ function clearError() {
 
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
+function applyTabTypeUI(type) {
+  selectedType = type;
+  btnChords.classList.toggle('active', type === 'Chords');
+  btnTabs.classList.toggle('active', type === 'Tab');
+}
+
 async function init() {
   const { client_id, access_token } = await chrome.storage.local.get(['client_id', 'access_token']);
 
@@ -61,6 +67,9 @@ async function init() {
     screenMain.classList.remove('hidden');
     const autoRes = await msg('GET_AUTO');
     document.getElementById('auto-toggle').checked = !!autoRes?.enabled;
+    // Reflect whatever tab type is actually in effect (set manually last time,
+    // or by auto mode) instead of always showing "Συγχορδίες" on reopen.
+    applyTabTypeUI(autoRes?.tabType === 'Tab' ? 'Tab' : 'Chords');
     await loadTrack();
   }
 }
@@ -120,7 +129,6 @@ async function findChords() {
     showError('Κάτι πήγε στραβά: ' + (res?.error || 'unknown'));
   } else {
     lastResultUrl = res.url;
-    chrome.tabs.create({ url: res.url });
 
     const badges = {
       'kithara':        '🇬🇷 kithara.to',
@@ -133,11 +141,18 @@ async function findChords() {
     sourceBadge.textContent = badges[res.source] || '';
     sourceBadge.classList.remove('hidden');
 
-    const display = res.meta
-      ? `<strong>${res.meta.title}</strong><br>${res.meta.artist}`
-      : `<strong>${currentTrack.name}</strong><br>${currentTrack.artist}`;
-    resultInfo.innerHTML = display;
+    const titleText = res.meta ? res.meta.title : currentTrack.name;
+    const artistText = res.meta ? res.meta.artist : currentTrack.artist;
+    resultInfo.replaceChildren();
+    const strong = document.createElement('strong');
+    strong.textContent = titleText;
+    resultInfo.append(strong, document.createElement('br'), artistText);
     resultDiv.classList.remove('hidden');
+
+    // Opening the tab shifts focus away and usually closes this popup — do
+    // it last, after the result card above has actually painted, so a quick
+    // glance still shows what was found before the popup disappears.
+    chrome.tabs.create({ url: res.url });
   }
 
   btnFind.textContent = 'Βρες →';
@@ -165,18 +180,14 @@ btnLogin.addEventListener('click', async () => {
 });
 
 btnChords.addEventListener('click', () => {
-  selectedType = 'Chords';
-  btnChords.classList.add('active');
-  btnTabs.classList.remove('active');
+  applyTabTypeUI('Chords');
   resultDiv.classList.add('hidden');
   sourceBadge.classList.add('hidden');
   msg('SET_TAB_TYPE', { tabType: 'Chords' });
 });
 
 btnTabs.addEventListener('click', () => {
-  selectedType = 'Tab';
-  btnTabs.classList.add('active');
-  btnChords.classList.remove('active');
+  applyTabTypeUI('Tab');
   resultDiv.classList.add('hidden');
   sourceBadge.classList.add('hidden');
   msg('SET_TAB_TYPE', { tabType: 'Tab' });
