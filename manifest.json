@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "GuitarSync",
   "version": "1.0.0",
-  "description": "Βρες αυτόματα συγχορδίες & tabs για ό,τι παίζει στο Spotify",
+  "description": "Automatically finds chords & tabs for whatever's playing on Spotify",
   "action": {
     "default_popup": "popup.html",
     "default_title": "GuitarSync",

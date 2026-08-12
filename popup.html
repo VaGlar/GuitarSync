@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="el">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,10 +11,10 @@
   <!-- Setup screen -->
   <div id="screen-setup" class="screen">
     <div class="brand"><img src="icons/icon32.png" alt="" class="brand-icon" /><span class="brand-name">GuitarSync</span></div>
-    <p class="subtitle">Βάλε το Spotify Client ID σου για να ξεκινήσεις</p>
+    <p class="subtitle">Enter your Spotify Client ID to get started</p>
     <input id="client-id-input" type="text" placeholder="Spotify Client ID" spellcheck="false" />
-    <button id="btn-login" class="btn btn-primary">Σύνδεση με Spotify</button>
-    <a class="help-link" href="https://developer.spotify.com/dashboard" target="_blank">Πώς να πάρω Client ID →</a>
+    <button id="btn-login" class="btn btn-primary">Connect with Spotify</button>
+    <a class="help-link" href="https://developer.spotify.com/dashboard" target="_blank">How do I get a Client ID →</a>
   </div>
 
   <!-- Main screen -->
@@ -33,29 +33,26 @@
     </div>
 
     <div id="no-track" class="empty-state hidden">
-      <span class="empty-icon">⏸</span>
-      <span>Δεν παίζει τίποτα τώρα</span>
+      <span class="empty-icon">⏻</span>
+      <span>STANDBY</span>
     </div>
 
     <!-- Auto mode -->
     <div class="auto-row">
-      <div>
-        <div class="auto-label">Auto mode</div>
-        <div class="auto-sub">Αλλάζει συγχορδίες αυτόματα με το τραγούδι</div>
-      </div>
-      <label class="switch">
+      <span class="auto-label">AUTO</span>
+      <label class="power-switch">
         <input id="auto-toggle" type="checkbox" />
-        <span class="slider"></span>
+        <span class="power-led"></span>
       </label>
     </div>
 
     <!-- Controls -->
     <div class="controls">
-      <div class="toggle-group">
-        <button id="btn-chords" class="toggle-btn active" data-value="Chords">Συγχορδίες</button>
-        <button id="btn-tabs" class="toggle-btn" data-value="Tab">Tabs</button>
+      <div class="rocker">
+        <button id="btn-chords" class="rocker-half active" data-value="Chords">CHORDS</button>
+        <button id="btn-tabs" class="rocker-half" data-value="Tab">TABS</button>
       </div>
-      <button id="btn-find" class="btn btn-primary" disabled>Βρες →</button>
+      <button id="btn-find" class="btn btn-primary" disabled>Find →</button>
     </div>
 
     <!-- Source badge -->
@@ -64,7 +61,7 @@
     <!-- Result -->
     <div id="result" class="result hidden">
       <div id="result-info" class="result-info"></div>
-      <button id="btn-open" class="btn btn-open">Άνοιξε ξανά →</button>
+      <button id="btn-open" class="btn btn-open">Open again →</button>
     </div>
 
     <!-- Error -->
@@ -73,14 +70,14 @@
     <!-- History -->
     <div id="history" class="history hidden">
       <div class="history-header">
-        <span>Ιστορικό</span>
-        <button id="btn-clear-history" class="history-clear">Καθαρισμός</button>
+        <span>History</span>
+        <button id="btn-clear-history" class="history-clear">Clear</button>
       </div>
       <div id="history-list" class="history-list"></div>
     </div>
 
-    <button id="btn-refresh" class="btn-icon" title="Ανανέωση">↻</button>
-    <button id="btn-logout" class="btn-logout">Αποσύνδεση</button>
+    <button id="btn-refresh" class="btn-icon" title="Refresh">↻</button>
+    <button id="btn-logout" class="btn-logout">Log out</button>
   </div>
 
   <script src="popup.js"></script>

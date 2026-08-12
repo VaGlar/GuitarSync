@@ -23,6 +23,7 @@ const btnFind    = document.getElementById('btn-find');
 const btnRefresh = document.getElementById('btn-refresh');
 const btnLogout  = document.getElementById('btn-logout');
 const btnOpen    = document.getElementById('btn-open');
+const autoToggle = document.getElementById('auto-toggle');
 
 const sourceBadge = document.getElementById('source-badge');
 const resultDiv   = document.getElementById('result');
@@ -59,6 +60,14 @@ function applyTabTypeUI(type) {
   btnTabs.classList.toggle('active', type === 'Tab');
 }
 
+// Auto mode handles finding chords/tabs on its own, so the manual "Find"
+// button is redundant (and the rocker switch can take the full row) while
+// it's on.
+function applyAutoUI(enabled) {
+  autoToggle.checked = enabled;
+  btnFind.classList.toggle('hidden', enabled);
+}
+
 async function init() {
   const { client_id, access_token } = await chrome.storage.local.get(['client_id', 'access_token']);
 
@@ -70,9 +79,9 @@ async function init() {
     screenSetup.classList.add('hidden');
     screenMain.classList.remove('hidden');
     const autoRes = await msg('GET_AUTO');
-    document.getElementById('auto-toggle').checked = !!autoRes?.enabled;
+    applyAutoUI(!!autoRes?.enabled);
     // Reflect whatever tab type is actually in effect (set manually last time,
-    // or by auto mode) instead of always showing "Συγχορδίες" on reopen.
+    // or by auto mode) instead of always showing "Chords" on reopen.
     applyTabTypeUI(autoRes?.tabType === 'Tab' ? 'Tab' : 'Chords');
     await loadTrack();
     await loadHistory();
@@ -90,9 +99,9 @@ async function loadTrack() {
 
   if (!res?.ok) {
     if (res?.error === 'not_logged_in') {
-      showError('Η σύνδεση έληξε. Αποσυνδέσου και συνδέσου ξανά.');
+      showError('Session expired. Log out and log back in.');
     } else {
-      showError('Αδύνατη η επικοινωνία με το Spotify.');
+      showError('Could not reach Spotify.');
     }
     trackCard.classList.add('hidden');
     noTrack.classList.remove('hidden');
@@ -113,7 +122,7 @@ async function loadTrack() {
   trackImage.src = currentTrack.image || '';
   trackName.textContent = currentTrack.name;
   trackArtist.textContent = currentTrack.artist;
-  trackStatus.textContent = currentTrack.isPlaying ? '▶ Παίζει τώρα' : '⏸ Paused';
+  trackStatus.textContent = currentTrack.isPlaying ? '▶ Now Playing' : '⏸ Paused';
 
   btnFind.disabled = false;
 }
@@ -188,17 +197,17 @@ async function findChords() {
   const res = await msg('RESOLVE_URL', { track: currentTrack, tabType: selectedType });
 
   if (!res?.ok) {
-    showError('Κάτι πήγε στραβά: ' + (res?.error || 'unknown'));
+    showError('Something went wrong: ' + (res?.error || 'unknown'));
   } else {
     lastResultUrl = res.url;
 
     const badges = {
       'kithara':        '🇬🇷 kithara.to',
-      'kithara-search': '🇬🇷 kithara.to (αναζήτηση)',
+      'kithara-search': '🇬🇷 kithara.to (search)',
       'ug':             res.meta?.rating
                           ? `🎸 Ultimate Guitar  ⭐ ${res.meta.rating.toFixed(1)} (${res.meta.votes} votes)`
                           : '🎸 Ultimate Guitar',
-      'google':         '🔍 Δεν βρέθηκε στο UG — Google fallback',
+      'google':         '🔍 Not found on UG — Google fallback',
     };
     sourceBadge.textContent = badges[res.source] || '';
     sourceBadge.classList.remove('hidden');
@@ -218,16 +227,16 @@ async function findChords() {
     chrome.tabs.create({ url: res.url });
   }
 
-  btnFind.textContent = 'Βρες →';
+  btnFind.textContent = 'Find →';
   btnFind.disabled = false;
 }
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 btnLogin.addEventListener('click', async () => {
   const cid = clientIdInput.value.trim();
-  if (!cid) { alert('Βάλε το Client ID σου'); return; }
+  if (!cid) { alert('Enter your Client ID'); return; }
 
-  btnLogin.textContent = 'Σύνδεση…';
+  btnLogin.textContent = 'Connecting…';
   btnLogin.disabled = true;
 
   const res = await msg('LOGIN', { clientId: cid });
@@ -236,8 +245,8 @@ btnLogin.addEventListener('click', async () => {
     screenMain.classList.remove('hidden');
     await loadTrack();
   } else {
-    alert('Αποτυχία σύνδεσης: ' + (res?.error || 'unknown'));
-    btnLogin.textContent = 'Σύνδεση με Spotify';
+    alert('Login failed: ' + (res?.error || 'unknown'));
+    btnLogin.textContent = 'Connect with Spotify';
     btnLogin.disabled = false;
   }
 });
@@ -256,7 +265,8 @@ btnTabs.addEventListener('click', () => {
   msg('SET_TAB_TYPE', { tabType: 'Tab' });
 });
 
-document.getElementById('auto-toggle').addEventListener('change', (e) => {
+autoToggle.addEventListener('change', (e) => {
+  applyAutoUI(e.target.checked);
   msg('SET_AUTO', { enabled: e.target.checked, tabType: selectedType });
 });
 
