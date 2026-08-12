@@ -34,7 +34,9 @@ const historyDiv     = document.getElementById('history');
 const historyList    = document.getElementById('history-list');
 const btnClearHistory = document.getElementById('btn-clear-history');
 
-const badgeLabelSelect = document.getElementById('badge-label-select');
+const badgeKnob      = document.getElementById('badge-knob');
+const badgeKnobDial  = badgeKnob.querySelector('.knob');
+const badgeKnobLabel = document.getElementById('badge-knob-label');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function msg(type, payload = {}) {
@@ -91,21 +93,38 @@ async function init() {
   }
 }
 
-// ─── Badge label ──────────────────────────────────────────────────────────────
+// ─── Badge label knob ──────────────────────────────────────────────────────────
+// A rotary control (click to advance) rather than a dropdown — spans a
+// potentiometer-style 270° sweep across however many options there are.
+const KNOB_MIN_DEG = -135;
+const KNOB_MAX_DEG = 135;
+
+let badgeOptions = ['LIVE'];
+let badgeIndex = 0;
+
+function knobAngle(index, total) {
+  if (total <= 1) return 0;
+  const step = (KNOB_MAX_DEG - KNOB_MIN_DEG) / (total - 1);
+  return KNOB_MIN_DEG + index * step;
+}
+
+function applyBadgeKnob() {
+  badgeKnobLabel.textContent = badgeOptions[badgeIndex];
+  badgeKnobDial.style.transform = `rotate(${knobAngle(badgeIndex, badgeOptions.length)}deg)`;
+}
+
 async function loadBadgeLabel() {
   const res = await msg('GET_BADGE_LABEL');
   if (!res?.ok) return;
-  badgeLabelSelect.replaceChildren(...res.options.map(opt => {
-    const o = document.createElement('option');
-    o.value = opt;
-    o.textContent = opt;
-    return o;
-  }));
-  badgeLabelSelect.value = res.label;
+  badgeOptions = res.options;
+  badgeIndex = Math.max(0, badgeOptions.indexOf(res.label));
+  applyBadgeKnob();
 }
 
-badgeLabelSelect.addEventListener('change', () => {
-  msg('SET_BADGE_LABEL', { label: badgeLabelSelect.value });
+badgeKnob.addEventListener('click', () => {
+  badgeIndex = (badgeIndex + 1) % badgeOptions.length;
+  applyBadgeKnob();
+  msg('SET_BADGE_LABEL', { label: badgeOptions[badgeIndex] });
 });
 
 // ─── Load current track ───────────────────────────────────────────────────────
