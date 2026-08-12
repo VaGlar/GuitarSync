@@ -15,6 +15,7 @@ const ROOT_DIR = path.join(__dirname, '..');
 const KEY_PATH = path.join(ROOT_DIR, 'extension-key.pem');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const SOURCE_FILES = ['manifest.json', 'background.js', 'popup.html', 'popup.css', 'popup.js'];
+const SOURCE_DIRS = ['icons'];
 
 function getOrCreatePrivateKey() {
   if (fs.existsSync(KEY_PATH)) {
@@ -57,6 +58,10 @@ function build() {
     } else {
       fs.copyFileSync(srcPath, destPath);
     }
+  }
+
+  for (const dir of SOURCE_DIRS) {
+    fs.cpSync(path.join(ROOT_DIR, dir), path.join(DIST_DIR, dir), { recursive: true });
   }
 
   console.log(`Built ${path.relative(ROOT_DIR, DIST_DIR)}/ with a pinned extension ID.\n`);

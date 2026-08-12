@@ -31,11 +31,21 @@ body {
 .screen { display: flex; flex-direction: column; gap: 12px; }
 .hidden { display: none !important; }
 
-/* ── Setup screen ────────────────────────────────────────────────────────── */
-.logo {
-  font-size: 22px;
+/* ── Brand header ────────────────────────────────────────────────────────── */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.brand-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.brand-name {
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.3px;
   color: var(--text);
 }
 
