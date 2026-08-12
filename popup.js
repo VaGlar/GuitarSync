@@ -23,6 +23,7 @@ const btnFind    = document.getElementById('btn-find');
 const btnRefresh = document.getElementById('btn-refresh');
 const btnLogout  = document.getElementById('btn-logout');
 const btnOpen    = document.getElementById('btn-open');
+const autoToggle = document.getElementById('auto-toggle');
 
 const sourceBadge = document.getElementById('source-badge');
 const resultDiv   = document.getElementById('result');
@@ -32,6 +33,10 @@ const errorMsg    = document.getElementById('error-msg');
 const historyDiv     = document.getElementById('history');
 const historyList    = document.getElementById('history-list');
 const btnClearHistory = document.getElementById('btn-clear-history');
+
+const badgeKnob      = document.getElementById('badge-knob');
+const badgeKnobDial  = badgeKnob.querySelector('.knob');
+const badgeKnobLabel = document.getElementById('badge-knob-label');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function msg(type, payload = {}) {
@@ -59,6 +64,14 @@ function applyTabTypeUI(type) {
   btnTabs.classList.toggle('active', type === 'Tab');
 }
 
+// Auto mode handles finding chords/tabs on its own, so the manual "Find"
+// button is redundant (and the rocker switch can take the full row) while
+// it's on.
+function applyAutoUI(enabled) {
+  autoToggle.checked = enabled;
+  btnFind.classList.toggle('hidden', enabled);
+}
+
 async function init() {
   const { client_id, access_token } = await chrome.storage.local.get(['client_id', 'access_token']);
 
@@ -70,14 +83,49 @@ async function init() {
     screenSetup.classList.add('hidden');
     screenMain.classList.remove('hidden');
     const autoRes = await msg('GET_AUTO');
-    document.getElementById('auto-toggle').checked = !!autoRes?.enabled;
+    applyAutoUI(!!autoRes?.enabled);
     // Reflect whatever tab type is actually in effect (set manually last time,
-    // or by auto mode) instead of always showing "Συγχορδίες" on reopen.
+    // or by auto mode) instead of always showing "Chords" on reopen.
     applyTabTypeUI(autoRes?.tabType === 'Tab' ? 'Tab' : 'Chords');
     await loadTrack();
     await loadHistory();
+    await loadBadgeLabel();
   }
 }
+
+// ─── Badge label knob ──────────────────────────────────────────────────────────
+// A rotary control (click to advance) rather than a dropdown — spans a
+// potentiometer-style 270° sweep across however many options there are.
+const KNOB_MIN_DEG = -135;
+const KNOB_MAX_DEG = 135;
+
+let badgeOptions = ['LIVE'];
+let badgeIndex = 0;
+
+function knobAngle(index, total) {
+  if (total <= 1) return 0;
+  const step = (KNOB_MAX_DEG - KNOB_MIN_DEG) / (total - 1);
+  return KNOB_MIN_DEG + index * step;
+}
+
+function applyBadgeKnob() {
+  badgeKnobLabel.textContent = badgeOptions[badgeIndex];
+  badgeKnobDial.style.transform = `rotate(${knobAngle(badgeIndex, badgeOptions.length)}deg)`;
+}
+
+async function loadBadgeLabel() {
+  const res = await msg('GET_BADGE_LABEL');
+  if (!res?.ok) return;
+  badgeOptions = res.options;
+  badgeIndex = Math.max(0, badgeOptions.indexOf(res.label));
+  applyBadgeKnob();
+}
+
+badgeKnob.addEventListener('click', () => {
+  badgeIndex = (badgeIndex + 1) % badgeOptions.length;
+  applyBadgeKnob();
+  msg('SET_BADGE_LABEL', { label: badgeOptions[badgeIndex] });
+});
 
 // ─── Load current track ───────────────────────────────────────────────────────
 async function loadTrack() {
@@ -90,9 +138,9 @@ async function loadTrack() {
 
   if (!res?.ok) {
     if (res?.error === 'not_logged_in') {
-      showError('Η σύνδεση έληξε. Αποσυνδέσου και συνδέσου ξανά.');
+      showError('Session expired. Log out and log back in.');
     } else {
-      showError('Αδύνατη η επικοινωνία με το Spotify.');
+      showError('Could not reach Spotify.');
     }
     trackCard.classList.add('hidden');
     noTrack.classList.remove('hidden');
@@ -113,7 +161,7 @@ async function loadTrack() {
   trackImage.src = currentTrack.image || '';
   trackName.textContent = currentTrack.name;
   trackArtist.textContent = currentTrack.artist;
-  trackStatus.textContent = currentTrack.isPlaying ? '▶ Παίζει τώρα' : '⏸ Paused';
+  trackStatus.textContent = currentTrack.isPlaying ? '▶ Now Playing' : '⏸ Paused';
 
   btnFind.disabled = false;
 }
@@ -176,6 +224,22 @@ btnClearHistory.addEventListener('click', async (e) => {
 });
 
 // ─── Search ───────────────────────────────────────────────────────────────────
+function createVuMeter() {
+  const meter = document.createElement('div');
+  meter.className = 'vu-meter';
+  const needle = document.createElement('div');
+  needle.className = 'vu-needle';
+  meter.appendChild(needle);
+  return meter;
+}
+
+const SOURCE_BADGE_CLASS = {
+  kithara: 'amber',
+  'kithara-search': 'amber',
+  ug: 'green',
+  google: 'warn',
+};
+
 async function findChords() {
   if (!currentTrack) return;
 
@@ -183,24 +247,26 @@ async function findChords() {
   resultDiv.classList.add('hidden');
   sourceBadge.classList.add('hidden');
   btnFind.disabled = true;
-  btnFind.textContent = '…';
+  btnFind.replaceChildren(createVuMeter());
 
   const res = await msg('RESOLVE_URL', { track: currentTrack, tabType: selectedType });
 
   if (!res?.ok) {
-    showError('Κάτι πήγε στραβά: ' + (res?.error || 'unknown'));
+    showError('Something went wrong: ' + (res?.error || 'unknown'));
   } else {
     lastResultUrl = res.url;
 
     const badges = {
       'kithara':        '🇬🇷 kithara.to',
-      'kithara-search': '🇬🇷 kithara.to (αναζήτηση)',
+      'kithara-search': '🇬🇷 kithara.to (search)',
       'ug':             res.meta?.rating
                           ? `🎸 Ultimate Guitar  ⭐ ${res.meta.rating.toFixed(1)} (${res.meta.votes} votes)`
                           : '🎸 Ultimate Guitar',
-      'google':         '🔍 Δεν βρέθηκε στο UG — Google fallback',
+      'google':         '🔍 Not found on UG — Google fallback',
     };
     sourceBadge.textContent = badges[res.source] || '';
+    sourceBadge.classList.remove('green', 'amber', 'warn');
+    sourceBadge.classList.add(SOURCE_BADGE_CLASS[res.source] || 'green');
     sourceBadge.classList.remove('hidden');
 
     const titleText = res.meta ? res.meta.title : currentTrack.name;
@@ -218,16 +284,16 @@ async function findChords() {
     chrome.tabs.create({ url: res.url });
   }
 
-  btnFind.textContent = 'Βρες →';
+  btnFind.textContent = 'Find →';
   btnFind.disabled = false;
 }
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 btnLogin.addEventListener('click', async () => {
   const cid = clientIdInput.value.trim();
-  if (!cid) { alert('Βάλε το Client ID σου'); return; }
+  if (!cid) { alert('Enter your Client ID'); return; }
 
-  btnLogin.textContent = 'Σύνδεση…';
+  btnLogin.textContent = 'Connecting…';
   btnLogin.disabled = true;
 
   const res = await msg('LOGIN', { clientId: cid });
@@ -236,8 +302,8 @@ btnLogin.addEventListener('click', async () => {
     screenMain.classList.remove('hidden');
     await loadTrack();
   } else {
-    alert('Αποτυχία σύνδεσης: ' + (res?.error || 'unknown'));
-    btnLogin.textContent = 'Σύνδεση με Spotify';
+    alert('Login failed: ' + (res?.error || 'unknown'));
+    btnLogin.textContent = 'Connect with Spotify';
     btnLogin.disabled = false;
   }
 });
@@ -256,7 +322,8 @@ btnTabs.addEventListener('click', () => {
   msg('SET_TAB_TYPE', { tabType: 'Tab' });
 });
 
-document.getElementById('auto-toggle').addEventListener('change', (e) => {
+autoToggle.addEventListener('change', (e) => {
+  applyAutoUI(e.target.checked);
   msg('SET_AUTO', { enabled: e.target.checked, tabType: selectedType });
 });
 
