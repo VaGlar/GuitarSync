@@ -369,6 +369,26 @@ input::placeholder { color: var(--text-muted); }
 }
 .btn-logout:hover { color: var(--error); }
 
+.footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.badge-select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 3px 6px;
+  cursor: pointer;
+  outline: none;
+  transition: color .15s, border-color .15s;
+}
+.badge-select:hover, .badge-select:focus { color: var(--gold); border-color: var(--gold-dim); }
+
 /* ── Auto mode row — power switch, no subtitle ──────────────────────────── */
 .auto-row {
   display: flex;

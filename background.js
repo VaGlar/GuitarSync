@@ -462,6 +462,21 @@ async function addToHistory(track, tabType, result) {
   await chrome.storage.local.set({ history: list.slice(0, MAX_HISTORY) });
 }
 
+// ─── Badge label (configurable "auto mode is on" indicator text) ───────────
+const BADGE_LABELS = ['ON', '♪', 'REC', 'JAM', 'LIVE'];
+const DEFAULT_BADGE_LABEL = 'LIVE';
+
+async function getBadgeLabel() {
+  const { badge_label } = await chrome.storage.local.get('badge_label');
+  return BADGE_LABELS.includes(badge_label) ? badge_label : DEFAULT_BADGE_LABEL;
+}
+
+async function setActiveBadge() {
+  const label = await getBadgeLabel();
+  chrome.action.setBadgeText({ text: label });
+  chrome.action.setBadgeBackgroundColor({ color: '#8a6f34' });
+}
+
 // Guards against the staggered 0s/10s/20s poll alarms overlapping: a single
 // resolveChordUrl() call can now involve several sequential network round
 // trips (Google, DDG, link verification) and take longer than the 10s gap
@@ -490,14 +505,13 @@ async function autoCheckImpl() {
   console.log('[GuitarSync] Auto check…');
   const result = await getCurrentTrack();
   if (result.error) {
-    // Surface failures (e.g. expired session) instead of silently going stale with an "ON" badge
+    // Surface failures (e.g. expired session) instead of silently going stale with the active badge
     console.error('[GuitarSync] Auto check failed:', result.error);
     chrome.action.setBadgeText({ text: '!' });
     chrome.action.setBadgeBackgroundColor({ color: '#e05252' });
     return;
   }
-  chrome.action.setBadgeText({ text: 'ON' });
-  chrome.action.setBadgeBackgroundColor({ color: '#1db954' });
+  await setActiveBadge();
 
   if (!result.track) return;
 
@@ -532,8 +546,7 @@ async function setAutoMode(enabled) {
   if (enabled) {
     await chrome.storage.local.set({ last_track_id: null });
     chrome.alarms.create('guitarsync-poll', { periodInMinutes: 0.5 });
-    chrome.action.setBadgeText({ text: 'ON' });
-    chrome.action.setBadgeBackgroundColor({ color: '#1db954' });
+    await setActiveBadge();
     autoCheck(); // immediate first check
   } else {
     for (const name of POLL_ALARMS) chrome.alarms.clear(name);
@@ -611,6 +624,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       await chrome.storage.local.set({ tab_type: msg.tabType, last_track_id: null });
       const { auto_enabled } = await chrome.storage.local.get('auto_enabled');
       if (auto_enabled) autoCheck(); // re-resolve current song with new type
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (msg.type === 'GET_BADGE_LABEL') {
+      sendResponse({ ok: true, label: await getBadgeLabel(), options: BADGE_LABELS });
+      return;
+    }
+
+    if (msg.type === 'SET_BADGE_LABEL') {
+      const label = BADGE_LABELS.includes(msg.label) ? msg.label : DEFAULT_BADGE_LABEL;
+      await chrome.storage.local.set({ badge_label: label });
+      const { auto_enabled } = await chrome.storage.local.get('auto_enabled');
+      if (auto_enabled) await setActiveBadge(); // reflect the new label immediately
       sendResponse({ ok: true });
       return;
     }

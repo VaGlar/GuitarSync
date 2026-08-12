@@ -34,6 +34,8 @@ const historyDiv     = document.getElementById('history');
 const historyList    = document.getElementById('history-list');
 const btnClearHistory = document.getElementById('btn-clear-history');
 
+const badgeLabelSelect = document.getElementById('badge-label-select');
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function msg(type, payload = {}) {
   return new Promise(resolve =>
@@ -85,8 +87,26 @@ async function init() {
     applyTabTypeUI(autoRes?.tabType === 'Tab' ? 'Tab' : 'Chords');
     await loadTrack();
     await loadHistory();
+    await loadBadgeLabel();
   }
 }
+
+// ─── Badge label ──────────────────────────────────────────────────────────────
+async function loadBadgeLabel() {
+  const res = await msg('GET_BADGE_LABEL');
+  if (!res?.ok) return;
+  badgeLabelSelect.replaceChildren(...res.options.map(opt => {
+    const o = document.createElement('option');
+    o.value = opt;
+    o.textContent = opt;
+    return o;
+  }));
+  badgeLabelSelect.value = res.label;
+}
+
+badgeLabelSelect.addEventListener('change', () => {
+  msg('SET_BADGE_LABEL', { label: badgeLabelSelect.value });
+});
 
 // ─── Load current track ───────────────────────────────────────────────────────
 async function loadTrack() {
