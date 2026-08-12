@@ -246,34 +246,10 @@ async function searchUG(track, tabType) {
   };
 }
 
-// Find the actual kithara.to song page via DuckDuckGo (bridges Greeklish ↔ Greek)
-async function findKitharaSongPage(query) {
-  const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent('site:kithara.to ' + query)}`;
-  console.log('[GuitarSync] DDG search:', ddgUrl);
-
-  const res = await fetch(ddgUrl);
-  if (!res.ok) return null;
-  const html = await res.text();
-
-  // Result links: <a class="result__a" href="...">
-  const linkRe = /class="result__a"[^>]*href="([^"]+)"/g;
-  let m;
-  const candidates = [];
-  while ((m = linkRe.exec(html)) !== null) {
-    let href = m[1];
-
-    // DDG redirect format: //duckduckgo.com/l/?uddg=<encoded-url>&...
-    if (href.includes('uddg=')) {
-      const uddg = new URL('https:' + href.replace(/^https?:/, '')).searchParams.get('uddg');
-      if (uddg) href = decodeURIComponent(uddg);
-    }
-
-    if (href.includes('kithara.to')) candidates.push(href);
-  }
-
-  // DDG's cached link can be stale (page renamed/removed on kithara.to since
-  // it was last crawled) — verify it actually loads before trusting it, and
-  // fall through to the next candidate rather than sending the user to a 404.
+// Try each candidate URL in order, returning the first that actually loads.
+// Search-engine indexes (DDG, Google) can point at stale/renamed pages —
+// this stops a dead link from being handed back as the answer.
+async function firstReachable(candidates) {
   for (const href of candidates) {
     try {
       const check = await fetch(href);
@@ -287,6 +263,73 @@ async function findKitharaSongPage(query) {
     }
   }
   return null;
+}
+
+// Google search for "<query> kithara" (not a strict site: filter) — its
+// matching handles Greeklish-to-Greek far better than DuckDuckGo does.
+async function searchGoogleForKithara(query) {
+  const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(query + ' kithara')}`;
+  console.log('[GuitarSync] Google search:', googleUrl);
+
+  const res = await fetch(googleUrl);
+  if (!res.ok) return [];
+  const html = await res.text();
+
+  // Organic results are linked either directly or via /url?q=<real-url>&...;
+  // match any href pointing at kithara.to either way, ignoring Google's own
+  // markup/class names (which change too often to rely on).
+  const hrefRe = /href="(?:\/url\?q=)?(https?:\/\/[^"&]*kithara\.to[^"]*)"/g;
+  const candidates = [];
+  let m;
+  while ((m = hrefRe.exec(html)) !== null) {
+    const href = m[1].split('&')[0];
+    if (!candidates.includes(href)) candidates.push(href);
+  }
+  return candidates;
+}
+
+// DuckDuckGo site:kithara.to search — kept as a fallback for whenever Google
+// blocks/CAPTCHAs the automated request above.
+async function searchDdgForKithara(query) {
+  const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent('site:kithara.to ' + query)}`;
+  console.log('[GuitarSync] DDG search:', ddgUrl);
+
+  const res = await fetch(ddgUrl);
+  if (!res.ok) return [];
+  const html = await res.text();
+
+  // Result links: <a class="result__a" href="...">
+  const linkRe = /class="result__a"[^>]*href="([^"]+)"/g;
+  const candidates = [];
+  let m;
+  while ((m = linkRe.exec(html)) !== null) {
+    let href = m[1];
+
+    // DDG redirect format: //duckduckgo.com/l/?uddg=<encoded-url>&...
+    if (href.includes('uddg=')) {
+      const uddg = new URL('https:' + href.replace(/^https?:/, '')).searchParams.get('uddg');
+      if (uddg) href = decodeURIComponent(uddg);
+    }
+
+    if (href.includes('kithara.to')) candidates.push(href);
+  }
+  return candidates;
+}
+
+// Find the actual kithara.to song page (bridges Greeklish ↔ Greek titles).
+async function findKitharaSongPage(query) {
+  const googleCandidates = await searchGoogleForKithara(query).catch(e => {
+    console.error('[GuitarSync] Google search failed:', e);
+    return [];
+  });
+  const fromGoogle = await firstReachable(googleCandidates);
+  if (fromGoogle) return fromGoogle;
+
+  const ddgCandidates = await searchDdgForKithara(query).catch(e => {
+    console.error('[GuitarSync] DDG search failed:', e);
+    return [];
+  });
+  return firstReachable(ddgCandidates);
 }
 
 async function resolveChordUrl(track, tabType) {

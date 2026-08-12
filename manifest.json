@@ -33,6 +33,7 @@
     "https://accounts.spotify.com/*",
     "https://www.ultimate-guitar.com/*",
     "https://kithara.to/*",
-    "https://html.duckduckgo.com/*"
+    "https://html.duckduckgo.com/*",
+    "https://www.google.com/*"
   ]
 }
