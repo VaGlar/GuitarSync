@@ -217,6 +217,8 @@ async function searchUG(track, tabType) {
 
   const json = JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
   const results = json?.store?.page?.data?.results || [];
+  console.log('[GuitarSync] UG result count:', results.length,
+    '| artists:', [...new Set(results.map(r => r.artist_name))]);
 
   // Score: rating weighted by votes, big bonus for correct artist
   const scored = results
