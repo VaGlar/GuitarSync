@@ -132,6 +132,7 @@ async function getCurrentTrack() {
 
 // ─── Greek detection ──────────────────────────────────────────────────────────
 const GREEK_GENRE_RE = /greek|laiko|laïko|entehno|éntekhno|rebetiko|rembetiko|skiladiko|kapsouriko|kritika|nisiotika|zeibekiko/i;
+const GENRE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — Spotify genre tags do get added/changed later
 
 async function isGreekTrack(track) {
   // 1. Unicode check — fastest
@@ -142,7 +143,8 @@ async function isGreekTrack(track) {
   try {
     const { genre_cache } = await chrome.storage.local.get('genre_cache');
     const cache = genre_cache || {};
-    if (track.artistId in cache) return cache[track.artistId];
+    const cached = cache[track.artistId];
+    if (cached && Date.now() - cached.ts < GENRE_CACHE_TTL_MS) return cached.greek;
 
     const token = await getValidToken();
     if (!token) return false;
@@ -156,7 +158,7 @@ async function isGreekTrack(track) {
     const greek = (artist.genres || []).some(g => GREEK_GENRE_RE.test(g));
     console.log('[GuitarSync] Artist genres:', artist.genres, '→ greek:', greek);
 
-    cache[track.artistId] = greek;
+    cache[track.artistId] = { greek, ts: Date.now() };
     await chrome.storage.local.set({ genre_cache: cache });
     return greek;
   } catch (e) {
@@ -197,6 +199,21 @@ function artistMatches(spotifyArtist, ugArtist) {
   return a.includes(b) || b.includes(a);
 }
 
+// UG's data-content attribute is HTML-entity-encoded. Decoding only &quot;
+// and &amp; (as before) left things like Guns N&#039; Roses undecoded —
+// normalize() then kept the digits "039" from "&#039;", so "Guns N' Roses"
+// (gunsnroses) and "Guns N&#039; Roses" (gunsn039roses) never matched.
+function decodeHtmlEntities(s) {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&amp;/g, '&');
+}
+
 async function searchUG(track, tabType) {
   const title = cleanTitle(track.name);
   const ugType = tabType === 'Tab' ? 'Tabs' : 'Chords';
@@ -213,8 +230,12 @@ async function searchUG(track, tabType) {
     return null;
   }
 
-  const json = JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+  const json = JSON.parse(decodeHtmlEntities(match[1]));
   const results = json?.store?.page?.data?.results || [];
+  console.log('[GuitarSync] UG result count:', results.length,
+    '| artists:', [...new Set(results.map(r => r.artist_name))]);
+  console.log('[GuitarSync] UG raw entries:',
+    results.map(r => ({ artist: r.artist_name, type: r.type, hasUrl: !!r.tab_url })));
 
   // Score: rating weighted by votes, big bonus for correct artist
   const scored = results
@@ -228,15 +249,16 @@ async function searchUG(track, tabType) {
     })
     .sort((a, b) => b.score - a.score);
 
-  if (scored.length === 0) return null;
-
-  // If nothing matches the artist at all, treat as not found (let fallback handle it)
-  if (!scored[0].artistOk) {
+  // Highest-scored result whose artist actually matches — the +100 artist
+  // bonus almost always puts a match at [0] already, but find() makes that
+  // guaranteed rather than incidental to the score's magnitude.
+  const best = scored.find(s => s.artistOk);
+  if (!best) {
     console.log('[GuitarSync] No artist match for', track.artist);
     return null;
   }
 
-  const top = scored[0].r;
+  const top = best.r;
   return {
     url: top.tab_url,
     title: top.song_name,
@@ -332,7 +354,28 @@ async function findKitharaSongPage(query) {
   return firstReachable(ddgCandidates);
 }
 
+// Cache resolved results per track+tabType for this service worker's lifetime.
+// Auto mode re-resolves every time a *different* song starts, so replayed or
+// shuffled-back-to songs would otherwise re-run the same Google/kithara/UG
+// lookups — wasted latency, and repeated automated Google requests are
+// exactly the pattern that gets an IP rate-limited/CAPTCHA'd.
+const resolveCache = new Map();
+
 async function resolveChordUrl(track, tabType) {
+  const cacheKey = `${track.id}:${tabType}`;
+  if (resolveCache.has(cacheKey)) {
+    console.log('[GuitarSync] Using cached result for', cacheKey);
+    return resolveCache.get(cacheKey);
+  }
+
+  const result = await resolveChordUrlUncached(track, tabType);
+
+  if (resolveCache.size > 500) resolveCache.clear(); // simple cap, not LRU
+  resolveCache.set(cacheKey, result);
+  return result;
+}
+
+async function resolveChordUrlUncached(track, tabType) {
   const title = cleanTitle(track.name);
   const query = `${title} ${track.artist}`;
   // Extra collaborators add noise to a kithara/DDG search (and are often
@@ -361,20 +404,22 @@ async function resolveChordUrl(track, tabType) {
   // UG turning up nothing is itself a signal: Greek songs almost never have UG
   // entries, and isGreekTrack() under-detects whenever a Greek song has a
   // Latin-script (Greeklish) title/artist and Spotify has no genre tags for
-  // the artist (both common). Try kithara before giving up on Google — first
-  // the exact page (works when the DDG query matches kithara's Greek text),
-  // then kithara's own search (its search box handles Greeklish input that a
-  // DDG site: search can't bridge to the Greek-script page content).
+  // the artist (both common). Try kithara's exact-page lookup before giving
+  // up — it now goes through Google internally, so it also catches most
+  // Greeklish-titled Greek songs.
   try {
     const page = await findKitharaSongPage(kitharaQuery);
     if (page) return { url: page, source: 'kithara' };
   } catch (e) {
     console.error('[GuitarSync] kithara fallback failed:', e);
   }
-  // Same last resort as the Greek branch above, rather than jumping to Google:
-  // kithara's own search box copes with Greeklish input in a way a DDG
-  // site: search — which matches against the page's Greek-script text — can't.
-  return { url: kitharaUrl(kitharaQuery), source: 'kithara-search' };
+  // Still nothing — at this point it's more likely a genuinely international,
+  // obscure (not on UG) song than a missed Greek one, so Google general
+  // search is the more useful last resort, not kithara's Greek-only search.
+  return {
+    url: `https://www.google.com/search?q=${encodeURIComponent(query + ' ' + tabType)}`,
+    source: 'google'
+  };
 }
 
 // ─── Auto mode: managed tab ───────────────────────────────────────────────────
@@ -398,7 +443,46 @@ async function getOrCreateManagedTab(url) {
   return tab.id;
 }
 
+// ─── History ──────────────────────────────────────────────────────────────────
+const MAX_HISTORY = 8;
+
+async function addToHistory(track, tabType, result) {
+  const { history } = await chrome.storage.local.get('history');
+  const list = (history || []).filter(h => h.trackId !== track.id);
+  list.unshift({
+    trackId: track.id,
+    name: track.name,
+    artist: track.artist,
+    image: track.image,
+    url: result.url,
+    source: result.source,
+    tabType,
+    resolvedAt: Date.now(),
+  });
+  await chrome.storage.local.set({ history: list.slice(0, MAX_HISTORY) });
+}
+
+// Guards against the staggered 0s/10s/20s poll alarms overlapping: a single
+// resolveChordUrl() call can now involve several sequential network round
+// trips (Google, DDG, link verification) and take longer than the 10s gap
+// between polls, which would otherwise let two checks run at once and
+// double-resolve/double-open a tab for the same track.
+let autoCheckInFlight = false;
+
 async function autoCheck() {
+  if (autoCheckInFlight) {
+    console.log('[GuitarSync] Auto check already running, skipping this tick');
+    return;
+  }
+  autoCheckInFlight = true;
+  try {
+    await autoCheckImpl();
+  } finally {
+    autoCheckInFlight = false;
+  }
+}
+
+async function autoCheckImpl() {
   const { auto_enabled, tab_type, last_track_id } =
     await chrome.storage.local.get(['auto_enabled', 'tab_type', 'last_track_id']);
   if (!auto_enabled) return;
@@ -423,8 +507,10 @@ async function autoCheck() {
   console.log('[GuitarSync] New track detected:', track.name, '-', track.artist);
   await chrome.storage.local.set({ last_track_id: track.id });
 
-  const { url } = await resolveChordUrl(track, tab_type || 'Chords');
-  await getOrCreateManagedTab(url);
+  const effectiveTabType = tab_type || 'Chords';
+  const resolved = await resolveChordUrl(track, effectiveTabType);
+  await addToHistory(track, effectiveTabType, resolved);
+  await getOrCreateManagedTab(resolved.url);
 }
 
 // Staggered checks within each poll window (~10s granularity), driven entirely by
@@ -491,19 +577,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
     if (msg.type === 'RESOLVE_URL') {
       const result = await resolveChordUrl(msg.track, msg.tabType);
+      await addToHistory(msg.track, msg.tabType, result);
       sendResponse({ ok: true, ...result });
       return;
     }
 
-    if (msg.type === 'SEARCH_UG') {
-      const ug = await searchUG({ name: msg.name, artist: msg.artist }, msg.tabType);
-      if (!ug) { sendResponse({ ok: false, error: 'no_results' }); return; }
-      sendResponse({ ok: true, ...ug });
+    if (msg.type === 'GET_HISTORY') {
+      const { history } = await chrome.storage.local.get('history');
+      sendResponse({ ok: true, history: history || [] });
       return;
     }
 
-    if (msg.type === 'SEARCH_KITHARA') {
-      sendResponse({ ok: true, url: kitharaUrl(msg.query) });
+    if (msg.type === 'CLEAR_HISTORY') {
+      await chrome.storage.local.set({ history: [] });
+      sendResponse({ ok: true });
       return;
     }
 
@@ -515,8 +602,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     }
 
     if (msg.type === 'GET_AUTO') {
-      const { auto_enabled } = await chrome.storage.local.get('auto_enabled');
-      sendResponse({ ok: true, enabled: !!auto_enabled });
+      const { auto_enabled, tab_type } = await chrome.storage.local.get(['auto_enabled', 'tab_type']);
+      sendResponse({ ok: true, enabled: !!auto_enabled, tabType: tab_type || 'Chords' });
       return;
     }
 
