@@ -443,6 +443,25 @@ async function getOrCreateManagedTab(url) {
   return tab.id;
 }
 
+// ─── History ──────────────────────────────────────────────────────────────────
+const MAX_HISTORY = 8;
+
+async function addToHistory(track, tabType, result) {
+  const { history } = await chrome.storage.local.get('history');
+  const list = (history || []).filter(h => h.trackId !== track.id);
+  list.unshift({
+    trackId: track.id,
+    name: track.name,
+    artist: track.artist,
+    image: track.image,
+    url: result.url,
+    source: result.source,
+    tabType,
+    resolvedAt: Date.now(),
+  });
+  await chrome.storage.local.set({ history: list.slice(0, MAX_HISTORY) });
+}
+
 // Guards against the staggered 0s/10s/20s poll alarms overlapping: a single
 // resolveChordUrl() call can now involve several sequential network round
 // trips (Google, DDG, link verification) and take longer than the 10s gap
@@ -488,8 +507,10 @@ async function autoCheckImpl() {
   console.log('[GuitarSync] New track detected:', track.name, '-', track.artist);
   await chrome.storage.local.set({ last_track_id: track.id });
 
-  const { url } = await resolveChordUrl(track, tab_type || 'Chords');
-  await getOrCreateManagedTab(url);
+  const effectiveTabType = tab_type || 'Chords';
+  const resolved = await resolveChordUrl(track, effectiveTabType);
+  await addToHistory(track, effectiveTabType, resolved);
+  await getOrCreateManagedTab(resolved.url);
 }
 
 // Staggered checks within each poll window (~10s granularity), driven entirely by
@@ -556,7 +577,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
     if (msg.type === 'RESOLVE_URL') {
       const result = await resolveChordUrl(msg.track, msg.tabType);
+      await addToHistory(msg.track, msg.tabType, result);
       sendResponse({ ok: true, ...result });
+      return;
+    }
+
+    if (msg.type === 'GET_HISTORY') {
+      const { history } = await chrome.storage.local.get('history');
+      sendResponse({ ok: true, history: history || [] });
+      return;
+    }
+
+    if (msg.type === 'CLEAR_HISTORY') {
+      await chrome.storage.local.set({ history: [] });
+      sendResponse({ ok: true });
       return;
     }
 
