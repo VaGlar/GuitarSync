@@ -183,7 +183,7 @@ function kitharaUrl(query) {
 function cleanTitle(name) {
   return name
     .replace(/\s*[\(\[][^\)\]]*[\)\]]/g, '')        // (feat. X), [Live], (Remastered)
-    .replace(/\s*-\s*(remaster(ed)?|live|acoustic|radio edit|single version|mono|stereo|deluxe|bonus track).*/i, '')
+    .replace(/\s*-\s*(\d{4}\s*)?(remaster(ed)?|live|acoustic|radio edit|single version|mono|stereo|deluxe|bonus track).*/i, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
