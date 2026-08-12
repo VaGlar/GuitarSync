@@ -344,7 +344,10 @@ const resolveCache = new Map();
 
 async function resolveChordUrl(track, tabType) {
   const cacheKey = `${track.id}:${tabType}`;
-  if (resolveCache.has(cacheKey)) return resolveCache.get(cacheKey);
+  if (resolveCache.has(cacheKey)) {
+    console.log('[GuitarSync] Using cached result for', cacheKey);
+    return resolveCache.get(cacheKey);
+  }
 
   const result = await resolveChordUrlUncached(track, tabType);
 
