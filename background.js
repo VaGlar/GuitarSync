@@ -135,7 +135,7 @@ const GREEK_GENRE_RE = /greek|laiko|laïko|entehno|éntekhno|rebetiko|rembetiko|
 
 async function isGreekTrack(track) {
   // 1. Unicode check — fastest
-  if (isGreek(track.name) || isGreek(track.artist)) return true;
+  if (isGreek(track.name) || isGreek(track.artist) || isGreek(track.album)) return true;
 
   // 2. Spotify artist genres
   if (!track.artistId) return false;
@@ -292,6 +292,18 @@ async function resolveChordUrl(track, tabType) {
   } catch (e) {
     console.error('[GuitarSync] UG search failed:', e);
   }
+
+  // UG turning up nothing is itself a signal: Greek songs almost never have UG
+  // entries, and isGreekTrack() under-detects whenever a Greek song has a
+  // Latin-script title/artist and Spotify has no genre tags for the artist
+  // (both common). Try kithara before giving up on Google.
+  try {
+    const page = await findKitharaSongPage(query);
+    if (page) return { url: page, source: 'kithara' };
+  } catch (e) {
+    console.error('[GuitarSync] kithara fallback failed:', e);
+  }
+
   return {
     url: `https://www.google.com/search?q=${encodeURIComponent(query + ' ' + tabType)}`,
     source: 'google'
