@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "GuitarSync",
+  "version": "1.0.0",
+  "description": "Βρες αυτόματα συγχορδίες & tabs για ό,τι παίζει στο Spotify",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "GuitarSync"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "identity",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://api.spotify.com/*",
+    "https://accounts.spotify.com/*",
+    "https://www.ultimate-guitar.com/*",
+    "https://kithara.to/*",
+    "https://html.duckduckgo.com/*"
+  ]
+}

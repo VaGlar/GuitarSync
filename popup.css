@@ -1,0 +1,308 @@
+/* ── Tokens ──────────────────────────────────────────────────────────────── */
+:root {
+  --bg:         #0f0f0f;
+  --surface:    #1a1a1a;
+  --surface2:   #242424;
+  --border:     #2e2e2e;
+  --accent:     #1db954;      /* Spotify green — doubles as guitar string */
+  --accent-dim: #157a37;
+  --text:       #f0f0f0;
+  --text-dim:   #888;
+  --text-muted: #555;
+  --error:      #e05252;
+  --radius:     10px;
+  --radius-sm:  6px;
+}
+
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  width: 320px;
+  min-height: 200px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  padding: 16px;
+}
+
+/* ── Screens ─────────────────────────────────────────────────────────────── */
+.screen { display: flex; flex-direction: column; gap: 12px; }
+.hidden { display: none !important; }
+
+/* ── Setup screen ────────────────────────────────────────────────────────── */
+.logo {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text);
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color .15s;
+}
+input:focus { border-color: var(--accent); }
+input::placeholder { color: var(--text-muted); }
+
+.help-link {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  text-align: center;
+}
+.help-link:hover { text-decoration: underline; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn {
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 16px;
+  transition: background .15s, opacity .15s;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #000;
+}
+.btn-primary:hover { background: #22d45f; }
+.btn-primary:disabled {
+  background: var(--surface2);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.btn-open {
+  background: var(--surface2);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  width: 100%;
+  margin-top: 8px;
+}
+.btn-open:hover { background: var(--border); }
+
+/* ── Track card ──────────────────────────────────────────────────────────── */
+.track-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px;
+  border: 1px solid var(--border);
+}
+
+.album-art {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--surface2);
+}
+
+.track-info { overflow: hidden; }
+
+.track-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.track-artist {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  margin-top: 2px;
+}
+
+.track-status {
+  font-size: 11px;
+  color: var(--accent);
+  margin-top: 4px;
+  font-weight: 600;
+  letter-spacing: .3px;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.empty-icon { font-size: 18px; }
+
+/* ── Controls ────────────────────────────────────────────────────────────── */
+.controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.toggle-group {
+  display: flex;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  flex: 1;
+  overflow: hidden;
+}
+
+.toggle-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.toggle-btn.active {
+  background: var(--accent);
+  color: #000;
+}
+.toggle-btn:not(.active):hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+/* ── Source badge ────────────────────────────────────────────────────────── */
+.source-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  letter-spacing: .3px;
+}
+
+/* ── Result ──────────────────────────────────────────────────────────────── */
+.result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.result-info {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.result-info strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* ── Error ───────────────────────────────────────────────────────────────── */
+.error-msg {
+  font-size: 12px;
+  color: var(--error);
+  background: rgba(224,82,82,.1);
+  border: 1px solid rgba(224,82,82,.2);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+
+/* ── Footer buttons ──────────────────────────────────────────────────────── */
+.btn-icon {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  position: absolute;
+  top: 12px;
+  right: 40px;
+  transition: color .15s;
+}
+.btn-icon:hover { color: var(--text); }
+
+.btn-logout {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+  padding: 4px;
+  transition: color .15s;
+}
+.btn-logout:hover { color: var(--error); }
+
+body { position: relative; }
+
+/* ── Auto mode row ───────────────────────────────────────────────────────── */
+.auto-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.auto-label { font-size: 13px; font-weight: 600; }
+.auto-sub   { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+.switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+
+.slider {
+  position: absolute;
+  inset: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  cursor: pointer;
+  transition: background .2s;
+}
+.slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  top: 2px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  transition: transform .2s, background .2s;
+}
+.switch input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+.switch input:checked + .slider::before { transform: translateX(18px); background: #000; }
