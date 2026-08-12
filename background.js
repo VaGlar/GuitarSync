@@ -171,7 +171,11 @@ function isGreek(text) {
 }
 
 function kitharaUrl(query) {
-  return `https://kithara.to/search?q=${encodeURIComponent(query)}`;
+  // kithara.to's search is a Google Custom Search widget: the visible query
+  // box reads "query", the results themselves render from the "gsc.q" hash
+  // param (client-side, Google CSE convention).
+  const q = encodeURIComponent(query);
+  return `https://kithara.to/fi?query=${q}#gsc.tab=0&gsc.q=${q}&gsc.page=1`;
 }
 
 function cleanTitle(name) {
