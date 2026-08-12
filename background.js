@@ -254,6 +254,7 @@ async function findKitharaSongPage(query) {
   // Result links: <a class="result__a" href="...">
   const linkRe = /class="result__a"[^>]*href="([^"]+)"/g;
   let m;
+  const candidates = [];
   while ((m = linkRe.exec(html)) !== null) {
     let href = m[1];
 
@@ -263,9 +264,22 @@ async function findKitharaSongPage(query) {
       if (uddg) href = decodeURIComponent(uddg);
     }
 
-    if (href.includes('kithara.to')) {
-      console.log('[GuitarSync] kithara page found:', href);
-      return href;
+    if (href.includes('kithara.to')) candidates.push(href);
+  }
+
+  // DDG's cached link can be stale (page renamed/removed on kithara.to since
+  // it was last crawled) — verify it actually loads before trusting it, and
+  // fall through to the next candidate rather than sending the user to a 404.
+  for (const href of candidates) {
+    try {
+      const check = await fetch(href);
+      if (check.ok) {
+        console.log('[GuitarSync] kithara page found:', href);
+        return href;
+      }
+      console.log('[GuitarSync] kithara candidate is dead, trying next:', href, check.status);
+    } catch (e) {
+      console.log('[GuitarSync] kithara candidate unreachable, trying next:', href);
     }
   }
   return null;
@@ -274,16 +288,20 @@ async function findKitharaSongPage(query) {
 async function resolveChordUrl(track, tabType) {
   const title = cleanTitle(track.name);
   const query = `${title} ${track.artist}`;
+  // Extra collaborators add noise to a kithara/DDG search (and are often
+  // absent from the page's Greek text entirely) — search on the primary
+  // artist only, keep the full credit for the Google fallback.
+  const kitharaQuery = `${title} ${track.artist.split(',')[0].trim()}`;
 
   if (await isGreekTrack(track)) {
     try {
-      const page = await findKitharaSongPage(query);
+      const page = await findKitharaSongPage(kitharaQuery);
       if (page) return { url: page, source: 'kithara' };
     } catch (e) {
       console.error('[GuitarSync] kithara resolution failed:', e);
     }
     // Fallback: kithara's own search page
-    return { url: kitharaUrl(query), source: 'kithara-search' };
+    return { url: kitharaUrl(kitharaQuery), source: 'kithara-search' };
   }
 
   try {
@@ -295,19 +313,21 @@ async function resolveChordUrl(track, tabType) {
 
   // UG turning up nothing is itself a signal: Greek songs almost never have UG
   // entries, and isGreekTrack() under-detects whenever a Greek song has a
-  // Latin-script title/artist and Spotify has no genre tags for the artist
-  // (both common). Try kithara before giving up on Google.
+  // Latin-script (Greeklish) title/artist and Spotify has no genre tags for
+  // the artist (both common). Try kithara before giving up on Google — first
+  // the exact page (works when the DDG query matches kithara's Greek text),
+  // then kithara's own search (its search box handles Greeklish input that a
+  // DDG site: search can't bridge to the Greek-script page content).
   try {
-    const page = await findKitharaSongPage(query);
+    const page = await findKitharaSongPage(kitharaQuery);
     if (page) return { url: page, source: 'kithara' };
   } catch (e) {
     console.error('[GuitarSync] kithara fallback failed:', e);
   }
-
-  return {
-    url: `https://www.google.com/search?q=${encodeURIComponent(query + ' ' + tabType)}`,
-    source: 'google'
-  };
+  // Same last resort as the Greek branch above, rather than jumping to Google:
+  // kithara's own search box copes with Greeklish input in a way a DDG
+  // site: search — which matches against the page's Greek-script text — can't.
+  return { url: kitharaUrl(kitharaQuery), source: 'kithara-search' };
 }
 
 // ─── Auto mode: managed tab ───────────────────────────────────────────────────
