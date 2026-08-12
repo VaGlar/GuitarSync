@@ -224,6 +224,22 @@ btnClearHistory.addEventListener('click', async (e) => {
 });
 
 // ─── Search ───────────────────────────────────────────────────────────────────
+function createVuMeter() {
+  const meter = document.createElement('div');
+  meter.className = 'vu-meter';
+  const needle = document.createElement('div');
+  needle.className = 'vu-needle';
+  meter.appendChild(needle);
+  return meter;
+}
+
+const SOURCE_BADGE_CLASS = {
+  kithara: 'amber',
+  'kithara-search': 'amber',
+  ug: 'green',
+  google: 'warn',
+};
+
 async function findChords() {
   if (!currentTrack) return;
 
@@ -231,7 +247,7 @@ async function findChords() {
   resultDiv.classList.add('hidden');
   sourceBadge.classList.add('hidden');
   btnFind.disabled = true;
-  btnFind.textContent = '…';
+  btnFind.replaceChildren(createVuMeter());
 
   const res = await msg('RESOLVE_URL', { track: currentTrack, tabType: selectedType });
 
@@ -249,6 +265,8 @@ async function findChords() {
       'google':         '🔍 Not found on UG — Google fallback',
     };
     sourceBadge.textContent = badges[res.source] || '';
+    sourceBadge.classList.remove('green', 'amber', 'warn');
+    sourceBadge.classList.add(SOURCE_BADGE_CLASS[res.source] || 'green');
     sourceBadge.classList.remove('hidden');
 
     const titleText = res.meta ? res.meta.title : currentTrack.name;

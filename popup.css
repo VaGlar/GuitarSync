@@ -92,6 +92,9 @@ input::placeholder { color: var(--text-muted); }
   font-size: 13px;
   font-weight: 700;
   padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: filter .15s, opacity .15s;
 }
 
@@ -222,12 +225,55 @@ input::placeholder { color: var(--text-muted); }
 }
 .rocker-half:not(.active):hover { color: var(--text-dim); }
 
-/* ── Source badge ────────────────────────────────────────────────────────── */
+/* ── VU meter (Find button, searching state) ────────────────────────────── */
+.vu-meter {
+  width: 46px;
+  height: 22px;
+  position: relative;
+  background: #0a0908;
+  border-radius: 22px 22px 0 0 / 22px 22px 0 0;
+  border: 1px solid #000;
+  border-bottom: none;
+  overflow: hidden;
+}
+.vu-needle {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  height: 19px;
+  background: var(--red-bright);
+  box-shadow: 0 0 3px rgba(255,106,82,.8);
+  transform-origin: bottom center;
+  animation: vu-sweep .55s ease-in-out infinite alternate;
+}
+@keyframes vu-sweep {
+  0%   { transform: translateX(-50%) rotate(-38deg); }
+  100% { transform: translateX(-50%) rotate(38deg); }
+}
+
+/* ── Source badge — LCD/tuner display ───────────────────────────────────── */
 .source-badge {
+  font-family: 'Consolas', 'Courier New', monospace;
   font-size: 11px;
-  color: var(--text-muted);
+  letter-spacing: .5px;
   text-align: center;
-  letter-spacing: .3px;
+  text-transform: uppercase;
+  color: #7cff8a;
+  background: #0a120a;
+  border: 1px solid #16241a;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  text-shadow: 0 0 4px rgba(124,255,138,.65), 0 0 1px rgba(124,255,138,.9);
+  box-shadow: inset 0 1px 4px rgba(0,0,0,.6);
+}
+.source-badge.amber {
+  color: #ffcf6b;
+  text-shadow: 0 0 4px rgba(255,207,107,.65), 0 0 1px rgba(255,207,107,.9);
+}
+.source-badge.warn {
+  color: #ff8a5c;
+  text-shadow: 0 0 4px rgba(255,138,92,.65), 0 0 1px rgba(255,138,92,.9);
 }
 
 /* ── Result ──────────────────────────────────────────────────────────────── */
