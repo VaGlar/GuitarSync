@@ -326,7 +326,17 @@ async function autoCheck() {
 
   console.log('[GuitarSync] Auto check…');
   const result = await getCurrentTrack();
-  if (result.error || !result.track) return;
+  if (result.error) {
+    // Surface failures (e.g. expired session) instead of silently going stale with an "ON" badge
+    console.error('[GuitarSync] Auto check failed:', result.error);
+    chrome.action.setBadgeText({ text: '!' });
+    chrome.action.setBadgeBackgroundColor({ color: '#e05252' });
+    return;
+  }
+  chrome.action.setBadgeText({ text: 'ON' });
+  chrome.action.setBadgeBackgroundColor({ color: '#1db954' });
+
+  if (!result.track) return;
 
   const track = result.track;
   if (track.id === last_track_id) return; // same song, nothing to do
@@ -338,12 +348,18 @@ async function autoCheck() {
   await getOrCreateManagedTab(url);
 }
 
-// Staggered checks within each alarm window → ~10s granularity
+// Staggered checks within each poll window (~10s granularity), driven entirely by
+// chrome.alarms rather than setTimeout — MV3 service workers can be terminated
+// between events, which silently drops pending setTimeout callbacks.
+const POLL_ALARMS = ['guitarsync-poll', 'guitarsync-poll-b', 'guitarsync-poll-c'];
+
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name !== 'guitarsync-poll') return;
+  if (!POLL_ALARMS.includes(alarm.name)) return;
   autoCheck();
-  setTimeout(autoCheck, 10000);
-  setTimeout(autoCheck, 20000);
+  if (alarm.name === 'guitarsync-poll') {
+    chrome.alarms.create('guitarsync-poll-b', { delayInMinutes: 10 / 60 });
+    chrome.alarms.create('guitarsync-poll-c', { delayInMinutes: 20 / 60 });
+  }
 });
 
 async function setAutoMode(enabled) {
@@ -355,7 +371,7 @@ async function setAutoMode(enabled) {
     chrome.action.setBadgeBackgroundColor({ color: '#1db954' });
     autoCheck(); // immediate first check
   } else {
-    chrome.alarms.clear('guitarsync-poll');
+    for (const name of POLL_ALARMS) chrome.alarms.clear(name);
     chrome.action.setBadgeText({ text: '' });
   }
 }
@@ -387,7 +403,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
     if (msg.type === 'LOGOUT') {
       await setAutoMode(false);
+      const { client_id } = await chrome.storage.local.get('client_id');
       await chrome.storage.local.clear();
+      if (client_id) await chrome.storage.local.set({ client_id }); // keep it prefilled for next login
       sendResponse({ ok: true });
       return;
     }
