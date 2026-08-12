@@ -171,7 +171,11 @@ function isGreek(text) {
 }
 
 function kitharaUrl(query) {
-  return `https://kithara.to/search?q=${encodeURIComponent(query)}`;
+  // kithara.to's search is a Google Custom Search widget: the visible query
+  // box reads "query", the results themselves render from the "gsc.q" hash
+  // param (client-side, Google CSE convention).
+  const q = encodeURIComponent(query);
+  return `https://kithara.to/fi?query=${q}#gsc.tab=0&gsc.q=${q}&gsc.page=1`;
 }
 
 function cleanTitle(name) {
@@ -242,17 +246,61 @@ async function searchUG(track, tabType) {
   };
 }
 
-// Find the actual kithara.to song page via DuckDuckGo (bridges Greeklish ↔ Greek)
-async function findKitharaSongPage(query) {
+// Try each candidate URL in order, returning the first that actually loads.
+// Search-engine indexes (DDG, Google) can point at stale/renamed pages —
+// this stops a dead link from being handed back as the answer.
+async function firstReachable(candidates) {
+  for (const href of candidates) {
+    try {
+      const check = await fetch(href);
+      if (check.ok) {
+        console.log('[GuitarSync] kithara page found:', href);
+        return href;
+      }
+      console.log('[GuitarSync] kithara candidate is dead, trying next:', href, check.status);
+    } catch (e) {
+      console.log('[GuitarSync] kithara candidate unreachable, trying next:', href);
+    }
+  }
+  return null;
+}
+
+// Google search for "<query> kithara" (not a strict site: filter) — its
+// matching handles Greeklish-to-Greek far better than DuckDuckGo does.
+async function searchGoogleForKithara(query) {
+  const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(query + ' kithara')}`;
+  console.log('[GuitarSync] Google search:', googleUrl);
+
+  const res = await fetch(googleUrl);
+  if (!res.ok) return [];
+  const html = await res.text();
+
+  // Organic results are linked either directly or via /url?q=<real-url>&...;
+  // match any href pointing at kithara.to either way, ignoring Google's own
+  // markup/class names (which change too often to rely on).
+  const hrefRe = /href="(?:\/url\?q=)?(https?:\/\/[^"&]*kithara\.to[^"]*)"/g;
+  const candidates = [];
+  let m;
+  while ((m = hrefRe.exec(html)) !== null) {
+    const href = m[1].split('&')[0];
+    if (!candidates.includes(href)) candidates.push(href);
+  }
+  return candidates;
+}
+
+// DuckDuckGo site:kithara.to search — kept as a fallback for whenever Google
+// blocks/CAPTCHAs the automated request above.
+async function searchDdgForKithara(query) {
   const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent('site:kithara.to ' + query)}`;
   console.log('[GuitarSync] DDG search:', ddgUrl);
 
   const res = await fetch(ddgUrl);
-  if (!res.ok) return null;
+  if (!res.ok) return [];
   const html = await res.text();
 
   // Result links: <a class="result__a" href="...">
   const linkRe = /class="result__a"[^>]*href="([^"]+)"/g;
+  const candidates = [];
   let m;
   while ((m = linkRe.exec(html)) !== null) {
     let href = m[1];
@@ -263,27 +311,44 @@ async function findKitharaSongPage(query) {
       if (uddg) href = decodeURIComponent(uddg);
     }
 
-    if (href.includes('kithara.to')) {
-      console.log('[GuitarSync] kithara page found:', href);
-      return href;
-    }
+    if (href.includes('kithara.to')) candidates.push(href);
   }
-  return null;
+  return candidates;
+}
+
+// Find the actual kithara.to song page (bridges Greeklish ↔ Greek titles).
+async function findKitharaSongPage(query) {
+  const googleCandidates = await searchGoogleForKithara(query).catch(e => {
+    console.error('[GuitarSync] Google search failed:', e);
+    return [];
+  });
+  const fromGoogle = await firstReachable(googleCandidates);
+  if (fromGoogle) return fromGoogle;
+
+  const ddgCandidates = await searchDdgForKithara(query).catch(e => {
+    console.error('[GuitarSync] DDG search failed:', e);
+    return [];
+  });
+  return firstReachable(ddgCandidates);
 }
 
 async function resolveChordUrl(track, tabType) {
   const title = cleanTitle(track.name);
   const query = `${title} ${track.artist}`;
+  // Extra collaborators add noise to a kithara/DDG search (and are often
+  // absent from the page's Greek text entirely) — search on the primary
+  // artist only, keep the full credit for the Google fallback.
+  const kitharaQuery = `${title} ${track.artist.split(',')[0].trim()}`;
 
   if (await isGreekTrack(track)) {
     try {
-      const page = await findKitharaSongPage(query);
+      const page = await findKitharaSongPage(kitharaQuery);
       if (page) return { url: page, source: 'kithara' };
     } catch (e) {
       console.error('[GuitarSync] kithara resolution failed:', e);
     }
     // Fallback: kithara's own search page
-    return { url: kitharaUrl(query), source: 'kithara-search' };
+    return { url: kitharaUrl(kitharaQuery), source: 'kithara-search' };
   }
 
   try {
@@ -295,19 +360,21 @@ async function resolveChordUrl(track, tabType) {
 
   // UG turning up nothing is itself a signal: Greek songs almost never have UG
   // entries, and isGreekTrack() under-detects whenever a Greek song has a
-  // Latin-script title/artist and Spotify has no genre tags for the artist
-  // (both common). Try kithara before giving up on Google.
+  // Latin-script (Greeklish) title/artist and Spotify has no genre tags for
+  // the artist (both common). Try kithara before giving up on Google — first
+  // the exact page (works when the DDG query matches kithara's Greek text),
+  // then kithara's own search (its search box handles Greeklish input that a
+  // DDG site: search can't bridge to the Greek-script page content).
   try {
-    const page = await findKitharaSongPage(query);
+    const page = await findKitharaSongPage(kitharaQuery);
     if (page) return { url: page, source: 'kithara' };
   } catch (e) {
     console.error('[GuitarSync] kithara fallback failed:', e);
   }
-
-  return {
-    url: `https://www.google.com/search?q=${encodeURIComponent(query + ' ' + tabType)}`,
-    source: 'google'
-  };
+  // Same last resort as the Greek branch above, rather than jumping to Google:
+  // kithara's own search box copes with Greeklish input in a way a DDG
+  // site: search — which matches against the page's Greek-script text — can't.
+  return { url: kitharaUrl(kitharaQuery), source: 'kithara-search' };
 }
 
 // ─── Auto mode: managed tab ───────────────────────────────────────────────────
