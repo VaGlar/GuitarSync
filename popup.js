@@ -120,6 +120,7 @@ async function findChords() {
     showError('Κάτι πήγε στραβά: ' + (res?.error || 'unknown'));
   } else {
     lastResultUrl = res.url;
+    chrome.tabs.create({ url: res.url });
 
     const badges = {
       'kithara':        '🇬🇷 kithara.to',
