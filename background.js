@@ -199,6 +199,21 @@ function artistMatches(spotifyArtist, ugArtist) {
   return a.includes(b) || b.includes(a);
 }
 
+// UG's data-content attribute is HTML-entity-encoded. Decoding only &quot;
+// and &amp; (as before) left things like Guns N&#039; Roses undecoded —
+// normalize() then kept the digits "039" from "&#039;", so "Guns N' Roses"
+// (gunsnroses) and "Guns N&#039; Roses" (gunsn039roses) never matched.
+function decodeHtmlEntities(s) {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&amp;/g, '&');
+}
+
 async function searchUG(track, tabType) {
   const title = cleanTitle(track.name);
   const ugType = tabType === 'Tab' ? 'Tabs' : 'Chords';
@@ -215,7 +230,7 @@ async function searchUG(track, tabType) {
     return null;
   }
 
-  const json = JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+  const json = JSON.parse(decodeHtmlEntities(match[1]));
   const results = json?.store?.page?.data?.results || [];
   console.log('[GuitarSync] UG result count:', results.length,
     '| artists:', [...new Set(results.map(r => r.artist_name))]);
